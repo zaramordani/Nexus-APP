@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/api";
 import { useAuth } from "@/AuthContext";
-import { PageHead, Avatar } from "@/components/common";
+import { PageHead, Avatar, ReportBlockMenu } from "@/components/common";
 import { ArrowFatUp, ChatCircle, Plus, X, UsersThree } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -48,7 +48,10 @@ export default function Forum() {
                 <span className="font-black text-sm">{p.upvotes}</span>
               </button>
               <div className="flex-1 min-w-0">
-                <span className="nb-chip bg-[#A0C4FF] mb-2"><UsersThree size={14} weight="bold" /> {p.community}</span>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="nb-chip bg-[#A0C4FF] mb-2"><UsersThree size={14} weight="bold" /> {p.community}</span>
+                  <ReportBlockMenu targetType="forum_post" targetId={p.id} showBlock={false} />
+                </div>
                 <h3 className="font-display text-xl font-bold tracking-tight">{p.title}</h3>
                 <p className="text-sm text-[#4A4A4A] font-medium mt-1">{p.body}</p>
                 <div className="flex items-center gap-3 mt-3">

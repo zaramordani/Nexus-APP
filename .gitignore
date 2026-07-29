@@ -86,3 +86,18 @@ android-sdk/
 credentials.json
 *.key
 .credentials
+
+# Capacitor Android project - build output, local SDK path, and signing material
+# must never be committed (local.properties can contain machine-specific paths,
+# and keystores/passwords must stay out of version control entirely).
+frontend/android/local.properties
+frontend/android/.gradle/
+frontend/android/app/build/
+frontend/android/build/
+frontend/android/captures/
+frontend/android/.idea/
+frontend/android/*.iml
+frontend/android/app/*.iml
+**/*.jks
+**/*.keystore
+frontend/android/key.properties

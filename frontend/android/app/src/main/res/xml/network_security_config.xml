@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Google Play requires apps to protect network traffic. This config blocks
+  plaintext (HTTP) traffic app-wide; all API calls must go over HTTPS.
+  If you need to reach a local dev backend over plain HTTP while developing,
+  add a <domain-config cleartextTrafficPermitted="true"> block scoped to that
+  dev host only — never enable cleartext for the production domain.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

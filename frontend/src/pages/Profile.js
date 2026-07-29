@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import { api } from "@/api";
 import { useAuth } from "@/AuthContext";
 import { PageHead, Avatar, Reputation } from "@/components/common";
 import { AreaPicker } from "@/components/AreaSelect";
-import { ShieldCheck, FloppyDisk, X, Plus, Shuffle, LinkSimple } from "@phosphor-icons/react";
+import { ShieldCheck, FloppyDisk, X, Plus, Shuffle, LinkSimple, Trash, WarningCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const AVATAR_STYLES = ["thumbs", "bottts", "fun-emoji", "adventurer", "notionists", "lorelei", "micah", "personas"];
@@ -76,7 +77,22 @@ function TagEditor({ label, items, color, onChange, testid }) {
 }
 
 export default function Profile() {
-  const { user, setUser } = useAuth();
+  const { user, setUser, deleteAccount } = useAuth();
+  const nav = useNavigate();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      await deleteAccount();
+      toast.success("Your account and data have been deleted.");
+      nav("/", { replace: true });
+    } catch {
+      toast.error("Could not delete your account. Please try again.");
+      setDeleting(false);
+    }
+  };
   const [f, setF] = useState({
     name: user.name, school: user.school || "", grade: user.grade || "11th", bio: user.bio || "",
     avatar: user.avatar, interests: user.interests || [], skills: user.skills || [], looking_for: user.looking_for || [],
@@ -139,6 +155,30 @@ export default function Profile() {
           </button>
         </div>
       </div>
+
+      <div className="nb-card p-6 mt-6 border-[#E63946]">
+        <h3 className="font-display text-lg font-bold flex items-center gap-2 text-[#E63946]"><WarningCircle size={20} weight="bold" /> Danger zone</h3>
+        <p className="text-sm text-[#4A4A4A] font-medium mt-1 mb-3">
+          Deleting your account permanently removes your profile, messages, connections, reviews and forum posts. This can't be undone.
+        </p>
+        {!confirmingDelete ? (
+          <button type="button" className="nb-btn nb-btn-ghost text-sm py-2 text-[#E63946]" onClick={() => setConfirmingDelete(true)} data-testid="delete-account-btn">
+            <Trash size={16} weight="bold" /> Delete my account
+          </button>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-bold">Are you sure?</span>
+            <button type="button" className="nb-btn text-sm py-2 !bg-[#E63946] !text-white" onClick={handleDeleteAccount} disabled={deleting} data-testid="delete-account-confirm">
+              {deleting ? "Deleting…" : "Yes, permanently delete"}
+            </button>
+            <button type="button" className="nb-btn nb-btn-ghost text-sm py-2" onClick={() => setConfirmingDelete(false)} disabled={deleting}>Cancel</button>
+          </div>
+        )}
+      </div>
+
+      <p className="text-center text-xs text-[#4A4A4A] font-medium mt-6">
+        <Link to="/privacy" className="underline">Privacy Policy</Link> · <Link to="/terms" className="underline">Terms of Service</Link>
+      </p>
     </div>
   );
 }

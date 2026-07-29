@@ -14,6 +14,9 @@ import Forum from "@/pages/Forum";
 import Profile from "@/pages/Profile";
 import Discover from "@/pages/Discover";
 import Connections from "@/pages/Connections";
+import Privacy from "@/pages/Privacy";
+import Terms from "@/pages/Terms";
+import DeleteAccountRequest from "@/pages/DeleteAccountRequest";
 
 function Loader() {
   return (
@@ -44,6 +47,9 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<PublicOnly><Landing /></PublicOnly>} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/delete-account" element={<DeleteAccountRequest />} />
           <Route path="/login" element={<PublicOnly><Auth mode="login" /></PublicOnly>} />
           <Route path="/signup" element={<PublicOnly><Auth mode="signup" /></PublicOnly>} />
           <Route path="/app" element={<Protected><Dashboard /></Protected>} />

@@ -100,6 +100,22 @@ async def are_connected(a: str, b: str) -> bool:
     ]})
     return bool(c)
 
+async def is_blocked(a: str, b: str) -> bool:
+    """True if either user has blocked the other."""
+    c = await db.blocks.find_one({"$or": [
+        {"blocker_id": a, "blocked_id": b},
+        {"blocker_id": b, "blocked_id": a},
+    ]})
+    return bool(c)
+
+async def blocked_id_set(uid: str) -> set:
+    """All user ids that uid has blocked, or that have blocked uid."""
+    rows = await db.blocks.find({"$or": [{"blocker_id": uid}, {"blocked_id": uid}]}).to_list(2000)
+    out = set()
+    for r in rows:
+        out.add(r["blocked_id"] if r["blocker_id"] == uid else r["blocker_id"])
+    return out
+
 async def recompute_reputation(uid: str):
     reviews = await db.reviews.find({"reviewee_id": uid}).to_list(2000)
     if reviews:
@@ -175,6 +191,16 @@ class ReviewInput(BaseModel):
     comment: str = ""
     project_id: Optional[str] = None
 
+class ReportInput(BaseModel):
+    target_type: str         # "user" | "message" | "forum_post" | "forum_comment" | "project" | "opportunity"
+    target_id: str
+    reason: str
+    details: Optional[str] = ""
+
+class DeletionRequestInput(BaseModel):
+    email: str
+    reason: Optional[str] = ""
+
 async def get_current_user(request: Request) -> dict:
     token = request.cookies.get("access_token")
     if not token:
@@ -249,10 +275,11 @@ async def list_students(user: dict = Depends(get_current_user)):
     students = await db.users.find({"role": "student"}).to_list(200)
     shared = await shared_project_user_ids(user["id"])
     conn_map = await my_connection_map(user["id"])
+    blocked = await blocked_id_set(user["id"])
     out = []
     for s in students:
         sid = str(s["_id"])
-        if sid == user["id"]:
+        if sid == user["id"] or sid in blocked:
             continue
         c = clean(s)
         status = conn_map.get(sid, "none")
@@ -624,15 +651,19 @@ async def get_messages(other_id: str, user: dict = Depends(get_current_user)):
         {"from_user_id": user["id"], "to_user_id": other_id},
         {"from_user_id": other_id, "to_user_id": user["id"]}]}).sort("created_at", 1).to_list(1000)
     connected = await are_connected(user["id"], other_id)
+    blocked = await is_blocked(user["id"], other_id)
     sent = await db.messages.count_documents({"from_user_id": user["id"], "to_user_id": other_id})
     return {
         "messages": [clean(m) for m in msgs],
         "connected": connected,
-        "can_send": connected or sent < 1,
+        "blocked": blocked,
+        "can_send": (connected or sent < 1) and not blocked,
     }
 
 @api_router.post("/messages")
 async def post_message(data: MessageInput, user: dict = Depends(get_current_user)):
+    if await is_blocked(user["id"], data.to_user_id):
+        raise HTTPException(status_code=403, detail="You can't message this student.")
     connected = await are_connected(user["id"], data.to_user_id)
     if not connected:
         sent = await db.messages.count_documents({"from_user_id": user["id"], "to_user_id": data.to_user_id})
@@ -644,6 +675,91 @@ async def post_message(data: MessageInput, user: dict = Depends(get_current_user
     res = await db.messages.insert_one(doc)
     doc["_id"] = res.inserted_id
     return clean(doc)
+
+@api_router.post("/users/{sid}/block")
+async def block_user(sid: str, user: dict = Depends(get_current_user)):
+    if sid == user["id"]:
+        raise HTTPException(status_code=400, detail="You cannot block yourself")
+    if not await db.users.find_one({"_id": ObjectId(sid)}):
+        raise HTTPException(status_code=404, detail="Student not found")
+    await db.blocks.update_one(
+        {"blocker_id": user["id"], "blocked_id": sid},
+        {"$setOnInsert": {"blocker_id": user["id"], "blocked_id": sid, "created_at": now_iso()}},
+        upsert=True,
+    )
+    # A block also severs any existing connection between the two students.
+    await db.connections.delete_many({"$or": [
+        {"requester_id": user["id"], "recipient_id": sid},
+        {"requester_id": sid, "recipient_id": user["id"]},
+    ]})
+    return {"ok": True}
+
+@api_router.delete("/users/{sid}/block")
+async def unblock_user(sid: str, user: dict = Depends(get_current_user)):
+    await db.blocks.delete_one({"blocker_id": user["id"], "blocked_id": sid})
+    return {"ok": True}
+
+@api_router.get("/blocks")
+async def list_blocks(user: dict = Depends(get_current_user)):
+    blocks = await db.blocks.find({"blocker_id": user["id"]}).sort("created_at", -1).to_list(500)
+    umap = await user_map([b["blocked_id"] for b in blocks])
+    return [umap[b["blocked_id"]] for b in blocks if b["blocked_id"] in umap]
+
+@api_router.post("/reports")
+async def create_report(data: ReportInput, user: dict = Depends(get_current_user)):
+    """User-generated-content safety report. Reviewed by the Trust & Safety team;
+    Google Play's User Generated Content policy requires this reporting path
+    for any app that lets users message each other or post content."""
+    doc = {
+        "reporter_id": user["id"], "target_type": data.target_type, "target_id": data.target_id,
+        "reason": data.reason, "details": (data.details or "").strip(),
+        "status": "open", "created_at": now_iso(),
+    }
+    res = await db.reports.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    logger.warning("Content report: type=%s target=%s reporter=%s reason=%s",
+                    data.target_type, data.target_id, user["id"], data.reason)
+    return clean(doc)
+
+@api_router.delete("/auth/me")
+async def delete_account(response: Response, user: dict = Depends(get_current_user)):
+    """Self-service account deletion (Google Play User Data policy requirement).
+    Removes the account and associated personal content."""
+    uid = user["id"]
+    await db.messages.delete_many({"$or": [{"from_user_id": uid}, {"to_user_id": uid}]})
+    await db.connections.delete_many({"$or": [{"requester_id": uid}, {"recipient_id": uid}]})
+    reviews_given = await db.reviews.find({"reviewer_id": uid}).to_list(2000)
+    affected_reviewees = {r["reviewee_id"] for r in reviews_given}
+    await db.reviews.delete_many({"$or": [{"reviewer_id": uid}, {"reviewee_id": uid}]})
+    for reviewee_id in affected_reviewees:
+        await recompute_reputation(reviewee_id)
+    posts = await db.forum_posts.find({"author_id": uid}).to_list(2000)
+    post_ids = [str(p["_id"]) for p in posts]
+    if post_ids:
+        await db.forum_comments.delete_many({"post_id": {"$in": post_ids}})
+    await db.forum_comments.delete_many({"author_id": uid})
+    await db.forum_posts.delete_many({"author_id": uid})
+    await db.projects.update_many({"members": uid}, {"$pull": {"members": uid}})
+    await db.blocks.delete_many({"$or": [{"blocker_id": uid}, {"blocked_id": uid}]})
+    await db.reports.delete_many({"reporter_id": uid})
+    await db.users.delete_one({"_id": ObjectId(uid)})
+    response.delete_cookie("access_token", path="/")
+    return {"ok": True}
+
+@api_router.post("/account-deletion-requests")
+async def request_account_deletion(data: DeletionRequestInput):
+    """Public, no-login deletion request channel. Google Play requires a web
+    resource that lets a user request account/data deletion without needing
+    the app installed or an active session."""
+    doc = {
+        "email": data.email.lower().strip(),
+        "reason": (data.reason or "").strip(),
+        "status": "pending",
+        "created_at": now_iso(),
+    }
+    await db.account_deletion_requests.insert_one(doc)
+    logger.warning("Account deletion request received for %s", doc["email"])
+    return {"ok": True, "message": "We've received your request and will delete your account and data within 30 days."}
 
 @api_router.get("/forum")
 async def list_forum(community: Optional[str] = None, user: dict = Depends(get_current_user)):
@@ -735,6 +851,8 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
+    await db.blocks.create_index([("blocker_id", 1), ("blocked_id", 1)], unique=True)
+    await db.account_deletion_requests.create_index("email")
     await seed()
     await backfill_opportunity_locations()
 

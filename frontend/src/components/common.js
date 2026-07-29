@@ -49,3 +49,73 @@ export function areaSortKey(loc) {
 export function sortAreas(list) {
   return [...list].sort((a, b) => areaSortKey(a).localeCompare(areaSortKey(b)));
 }
+
+// --- Trust & safety: report / block menu (Google Play User Generated Content policy) ---
+import { useEffect as _useEffect, useRef as _useRef, useState as _useState } from "react";
+import { DotsThreeVertical, Flag, Prohibit } from "@phosphor-icons/react";
+import { api as _api, formatError as _formatError } from "@/api";
+import { toast as _toast } from "sonner";
+
+const REPORT_REASONS = ["Harassment or bullying", "Inappropriate content", "Spam or scam", "Impersonation", "Something else"];
+
+export function ReportBlockMenu({ targetType, targetId, targetName, showBlock = true, onBlocked, className = "" }) {
+  const [open, setOpen] = _useState(false);
+  const [reporting, setReporting] = _useState(false);
+  const ref = _useRef(null);
+
+  _useEffect(() => {
+    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setReporting(false); } };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  const report = async (reason) => {
+    try {
+      await _api.post("/reports", { target_type: targetType, target_id: targetId, reason });
+      _toast.success("Thanks — our Trust & Safety team will review this.");
+    } catch (e) { _toast.error(_formatError(e?.response?.data?.detail)); }
+    setReporting(false); setOpen(false);
+  };
+
+  const block = async () => {
+    if (!window.confirm(`Block ${targetName || "this student"}? They won't be able to message or see you, and any connection between you will be removed.`)) return;
+    try {
+      await _api.post(`/users/${targetId}/block`);
+      _toast.success(`${targetName || "Student"} blocked.`);
+      onBlocked && onBlocked();
+    } catch (e) { _toast.error(_formatError(e?.response?.data?.detail)); }
+    setOpen(false);
+  };
+
+  return (
+    <div className={`relative ${className}`} ref={ref}>
+      <button type="button" className="nb-btn nb-btn-ghost text-sm py-2 px-2" title="Report or block"
+        onClick={() => { setOpen((o) => !o); setReporting(false); }} data-testid={`more-${targetId}`}>
+        <DotsThreeVertical size={16} weight="bold" />
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 w-56 nb-card p-2 z-30 bg-white">
+          {!reporting ? (
+            <>
+              <button type="button" className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-[#FDFBF7] flex items-center gap-2"
+                onClick={() => setReporting(true)} data-testid={`report-${targetId}`}>
+                <Flag size={14} weight="bold" /> Report {targetType === "user" ? "student" : "content"}
+              </button>
+              {showBlock && targetType === "user" && (
+                <button type="button" className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-[#FDFBF7] flex items-center gap-2 text-[#E63946]"
+                  onClick={block} data-testid={`block-${targetId}`}>
+                  <Prohibit size={14} weight="bold" /> Block
+                </button>
+              )}
+            </>
+          ) : (
+            REPORT_REASONS.map((r) => (
+              <button key={r} type="button" className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-[#FDFBF7]"
+                onClick={() => report(r)} data-testid={`report-reason-${r.replace(/\s+/g, "-")}`}>{r}</button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

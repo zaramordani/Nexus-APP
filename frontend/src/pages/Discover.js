@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, formatError } from "@/api";
-import { PageHead, Avatar, Reputation, Chips } from "@/components/common";
+import { PageHead, Avatar, Reputation, Chips, ReportBlockMenu } from "@/components/common";
 import ReviewModal from "@/components/ReviewModal";
 import { ChatCircleDots, MagnifyingGlass, Handshake, Check, Clock, Star } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -90,6 +90,7 @@ export default function Discover() {
               <button className="nb-btn nb-btn-ghost text-sm py-2" title="Reviews" onClick={() => setReviewing(s)} data-testid={`review-${s.id}`}>
                 <Star size={16} weight="bold" />
               </button>
+              <ReportBlockMenu targetType="user" targetId={s.id} targetName={s.name} onBlocked={load} />
             </div>
           </div>
         ))}

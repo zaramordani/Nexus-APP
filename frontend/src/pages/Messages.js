@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { api, formatError } from "@/api";
 import { useAuth } from "@/AuthContext";
-import { Avatar } from "@/components/common";
+import { Avatar, ReportBlockMenu } from "@/components/common";
 import { PaperPlaneRight, ChatCircleDots, LockSimple } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -98,7 +98,9 @@ export default function Messages() {
               <div className="flex items-center gap-3 p-4 border-b-2 border-[#0A0A0A] bg-[#FDFBF7]">
                 <button className="md:hidden font-bold" onClick={() => setActive(null)}>←</button>
                 <Avatar src={active.avatar} name={active.name} className="w-10 h-10" />
-                <div className="font-display font-bold">{active.name}</div>
+                <div className="font-display font-bold flex-1">{active.name}</div>
+                <ReportBlockMenu targetType="user" targetId={active.id} targetName={active.name}
+                  onBlocked={() => { setActive(null); loadConvos(); }} />
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#FDFBF7]">
                 {messages.map((m) => {

@@ -115,7 +115,12 @@ export default function Landing() {
       </section>
 
       <footer className="border-t-2 border-[#0A0A0A] py-8 text-center text-sm font-medium text-[#4A4A4A]">
-        Project Nexus — built for ambitious high school students.
+        <p>Project Nexus — built for ambitious high school students.</p>
+        <p className="mt-2">
+          <Link to="/privacy" className="underline">Privacy Policy</Link> ·{" "}
+          <Link to="/terms" className="underline">Terms of Service</Link> ·{" "}
+          <Link to="/delete-account" className="underline">Delete my account</Link>
+        </p>
       </footer>
     </div>
   );

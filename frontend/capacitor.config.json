@@ -1,0 +1,8 @@
+{
+  "appId": "com.nexusapp.mobile",
+  "appName": "Nexus",
+  "webDir": "build",
+  "server": {
+    "androidScheme": "https"
+  }
+}
