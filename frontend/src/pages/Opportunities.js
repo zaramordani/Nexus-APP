@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, formatError } from "@/api";
 import { useAuth } from "@/AuthContext";
-import { PageHead, DeleteButton } from "@/components/common";
+import { PageHead, DeleteButton, PinButton } from "@/components/common";
 import { AreaFilter, AreaPicker } from "@/components/AreaSelect";
 import { parseLocation } from "@/constants/locations";
 import { Trophy, CalendarBlank, ArrowSquareOut, Buildings, MapPin, Sparkle, Plus, X, Globe, MapPinLine } from "@phosphor-icons/react";
@@ -126,7 +126,12 @@ export default function Opportunities() {
               </div>
               <div className="flex items-center gap-2">
                 <span className={`nb-chip ${TYPE_COLOR[o.type] || "bg-white"}`}>{o.type}</span>
-                {o.posted_by === user.id && <DeleteButton onDelete={() => deleteOpp(o)} label="opportunity" testId={`delete-opp-${o.id}`} />}
+                {o.posted_by === user.id && (
+                  <>
+                    <PinButton targetType="opportunity" targetId={o.id} pinned={o.pinned} testId={`pin-opp-${o.id}`} onPinned={loadOpps} />
+                    <DeleteButton onDelete={() => deleteOpp(o)} label="opportunity" testId={`delete-opp-${o.id}`} />
+                  </>
+                )}
               </div>
             </div>
             <h3 className="font-display text-xl font-bold tracking-tight leading-tight">{o.title}</h3>

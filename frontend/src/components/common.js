@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { Trophy, Star, ShieldCheck, Trash, X } from "@phosphor-icons/react";
+import { Trophy, Star, ShieldCheck, Trash, X, PushPin } from "@phosphor-icons/react";
+import { api, formatError } from "@/api";
+import { isNative, purchasePinSlot } from "@/lib/purchases";
+import { toast } from "sonner";
 export { Star };
 
 export function PageHead({ label, title, children }) {
@@ -179,5 +182,43 @@ export function DeleteButton({ onDelete, label = "post", testId, className = "" 
         <X size={14} weight="bold" />
       </button>
     </div>
+  );
+}
+
+// Native-only ($6 IAP): pin the caller's own content to the top of its list
+// for a day. Shows nothing on web (purchases only work inside the native
+// app), and a plain "Pinned" badge once a target already has a pin.
+export function PinButton({ targetType, targetId, pinned, testId, onPinned }) {
+  const [buying, setBuying] = useState(false);
+  if (!isNative()) return null;
+
+  if (pinned) {
+    return (
+      <span className="nb-chip bg-[#FFD166]">
+        <PushPin size={14} weight="fill" /> Pinned
+      </span>
+    );
+  }
+
+  const buy = async () => {
+    setBuying(true);
+    try {
+      const rc_transaction_id = await purchasePinSlot();
+      const { data } = await api.post("/purchases/verify", {
+        product_type: "pin_slot", rc_transaction_id, target_type: targetType, target_id: targetId,
+      });
+      toast.success(data.slot_date ? `Pinned for ${data.slot_date}!` : "Pinned!");
+      onPinned && onPinned();
+    } catch (err) {
+      if (err?.message !== "Purchase was cancelled.") toast.error(formatError(err?.response?.data?.detail) || err.message);
+    } finally {
+      setBuying(false);
+    }
+  };
+
+  return (
+    <button type="button" className="nb-chip bg-white hover:bg-[#FFD166]" onClick={buy} disabled={buying} data-testid={testId}>
+      <PushPin size={14} weight="bold" /> {buying ? "…" : "Pin ($6)"}
+    </button>
   );
 }

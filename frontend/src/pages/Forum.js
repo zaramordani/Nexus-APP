@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, formatError } from "@/api";
 import { useAuth } from "@/AuthContext";
-import { PageHead, Avatar, ReportBlockMenu, DeleteButton } from "@/components/common";
+import { PageHead, Avatar, ReportBlockMenu, DeleteButton, PinButton } from "@/components/common";
 import { ArrowFatUp, ChatCircle, Plus, X, UsersThree } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -61,9 +61,14 @@ export default function Forum() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
                   <span className="nb-chip bg-[#A0C4FF]"><UsersThree size={14} weight="bold" /> {p.community}</span>
-                  {p.author_id === user.id
-                    ? <DeleteButton onDelete={() => deletePost(p)} label="post" testId={`delete-post-${p.id}`} />
-                    : <ReportBlockMenu targetType="forum_post" targetId={p.id} showBlock={false} />}
+                  <div className="flex items-center gap-2">
+                    {p.author_id === user.id && (
+                      <PinButton targetType="forum_post" targetId={p.id} pinned={p.pinned} testId={`pin-post-${p.id}`} onPinned={load} />
+                    )}
+                    {p.author_id === user.id
+                      ? <DeleteButton onDelete={() => deletePost(p)} label="post" testId={`delete-post-${p.id}`} />
+                      : <ReportBlockMenu targetType="forum_post" targetId={p.id} showBlock={false} />}
+                  </div>
                 </div>
                 <h3 className="font-display text-xl font-bold tracking-tight">{p.title}</h3>
                 <p className="text-sm text-[#4A4A4A] font-medium mt-1">{p.body}</p>

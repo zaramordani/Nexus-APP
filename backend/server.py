@@ -17,6 +17,7 @@ from pydantic import BaseModel, BeforeValidator
 from bson import ObjectId
 
 from groq import AsyncGroq
+import requests
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -60,6 +61,58 @@ def clean(doc: dict) -> dict:
     doc["id"] = str(doc.pop("_id"))
     doc.pop("password_hash", None)
     return doc
+
+# --- Native in-app purchases (RevenueCat) ---
+# Product IDs below are placeholders: they must exactly match products you
+# create in App Store Connect / Google Play Console AND in RevenueCat (as
+# non-subscription / non-renewing products), or verification will always
+# fail to find a matching purchase. See PRD notes for the full setup
+# checklist. REVENUECAT_SECRET_API_KEY is the server-side secret key from
+# RevenueCat > Project Settings > API Keys (never the public SDK key).
+
+UNLOCK_PRODUCT_ID = "com.nexusapp.mobile.unlock_full"   # $1 one-time: ad-free + exclusive features
+PIN_PRODUCT_ID = "com.nexusapp.mobile.pin_slot"          # $6 one-time, repeatable: pin a post/opportunity for a day
+DAILY_PIN_SLOTS = 5
+PIN_TARGET_COLLECTIONS = {"forum_post": ("forum_posts", "author_id"), "opportunity": ("opportunities", "posted_by")}
+
+def revenuecat_secret_key() -> str:
+    key = os.environ.get("REVENUECAT_SECRET_API_KEY", "").strip()
+    if not key:
+        raise HTTPException(status_code=503, detail="Purchases are not configured yet")
+    return key
+
+def rc_get_subscriber(app_user_id: str) -> dict:
+    resp = requests.get(
+        f"https://api.revenuecat.com/v1/subscribers/{app_user_id}",
+        headers={"Authorization": f"Bearer {revenuecat_secret_key()}"},
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Could not verify purchase with RevenueCat")
+    return resp.json().get("subscriber", {})
+
+def rc_find_non_subscription_purchase(subscriber: dict, product_id: str, transaction_id: str) -> bool:
+    purchases = subscriber.get("non_subscriptions", {}).get(product_id, [])
+    return any(p.get("id") == transaction_id for p in purchases)
+
+async def get_own_pin_target(target_type: str, target_id: str, user_id: str):
+    if target_type not in PIN_TARGET_COLLECTIONS:
+        raise HTTPException(status_code=400, detail="Invalid target_type")
+    coll_name, owner_field = PIN_TARGET_COLLECTIONS[target_type]
+    try:
+        doc = await db[coll_name].find_one({"_id": ObjectId(target_id)})
+    except Exception:
+        doc = None
+    if not doc:
+        raise HTTPException(status_code=404, detail="Content not found")
+    if doc.get(owner_field) != user_id:
+        raise HTTPException(status_code=403, detail="You can only pin your own content")
+    return doc
+
+async def today_pin_map(target_type: str) -> dict:
+    today = date.today().isoformat()
+    slots = await db.pin_slots.find({"slot_date": today, "target_type": target_type}).to_list(DAILY_PIN_SLOTS)
+    return {s["target_id"]: s["rank"] for s in slots}
 
 async def user_map(ids):
     oids = []
@@ -593,7 +646,12 @@ async def update_progress(pid: str, body: dict, user: dict = Depends(get_current
 @api_router.get("/opportunities")
 async def list_opportunities(user: dict = Depends(get_current_user)):
     opps = await db.opportunities.find().sort("created_at", -1).to_list(200)
-    return [clean(o) for o in opps]
+    pinned = await today_pin_map("opportunity")
+    out = [clean(o) for o in opps]
+    for o in out:
+        o["pinned"] = o["id"] in pinned
+    out.sort(key=lambda o: 0 if o["pinned"] else 1)
+    return out
 
 OPEN_TO_ALL_LOC = {"Remote", "Nationwide", "Online"}
 
@@ -864,12 +922,15 @@ async def list_forum(community: Optional[str] = None, user: dict = Depends(get_c
                     {"$group": {"_id": "$post_id", "n": {"$sum": 1}}}]
         async for row in db.forum_comments.aggregate(pipeline):
             counts[row["_id"]] = row["n"]
+    pinned = await today_pin_map("forum_post")
     out = []
     for p in posts:
         p = clean(p)
         p["author"] = umap.get(p["author_id"])
         p["comment_count"] = counts.get(p["id"], 0)
+        p["pinned"] = p["id"] in pinned
         out.append(p)
+    out.sort(key=lambda p: 0 if p["pinned"] else 1)
     return out
 
 @api_router.post("/forum")
@@ -943,6 +1004,63 @@ async def dashboard(user: dict = Depends(get_current_user)):
             "opportunities": await db.opportunities.count_documents({}),
         }
     }
+
+class PurchaseVerifyInput(BaseModel):
+    product_type: str                  # "full_unlock" | "pin_slot"
+    rc_transaction_id: str
+    target_type: Optional[str] = None  # required for pin_slot
+    target_id: Optional[str] = None    # required for pin_slot
+
+@api_router.get("/pin-slots/today")
+async def pin_slots_today(user: dict = Depends(get_current_user)):
+    today = date.today().isoformat()
+    slots = await db.pin_slots.find({"slot_date": today}).sort("rank", 1).to_list(DAILY_PIN_SLOTS)
+    return {"slot_date": today, "slots_remaining": max(0, DAILY_PIN_SLOTS - len(slots)), "slots": [clean(s) for s in slots]}
+
+@api_router.post("/purchases/verify")
+async def verify_purchase(data: PurchaseVerifyInput, user: dict = Depends(get_current_user)):
+    subscriber = rc_get_subscriber(user["id"])
+
+    if data.product_type == "full_unlock":
+        if not rc_find_non_subscription_purchase(subscriber, UNLOCK_PRODUCT_ID, data.rc_transaction_id):
+            raise HTTPException(status_code=402, detail="No matching purchase found")
+        existing = await db.app_unlocks.find_one({"rc_transaction_id": data.rc_transaction_id})
+        if not existing:
+            await db.app_unlocks.insert_one({
+                "user_id": user["id"], "rc_transaction_id": data.rc_transaction_id, "created_at": now_iso(),
+            })
+        await db.users.update_one({"_id": ObjectId(user["id"])}, {"$set": {"app_unlocked": True}})
+        return {"ok": True, "app_unlocked": True}
+
+    if data.product_type == "pin_slot":
+        if not data.target_type or not data.target_id:
+            raise HTTPException(status_code=400, detail="target_type and target_id are required")
+        if not rc_find_non_subscription_purchase(subscriber, PIN_PRODUCT_ID, data.rc_transaction_id):
+            raise HTTPException(status_code=402, detail="No matching purchase found")
+        already_used = await db.pin_purchases.find_one({"rc_transaction_id": data.rc_transaction_id})
+        if already_used:
+            return {"ok": True, "already_granted": True, "slot_date": already_used["slot_date"]}
+        await get_own_pin_target(data.target_type, data.target_id, user["id"])
+
+        # Claim the first day (today, or the next day, and so on) with an open slot.
+        slot_date = date.today()
+        for _ in range(30):
+            iso = slot_date.isoformat()
+            count = await db.pin_slots.count_documents({"slot_date": iso})
+            if count < DAILY_PIN_SLOTS:
+                await db.pin_slots.insert_one({
+                    "slot_date": iso, "target_type": data.target_type, "target_id": data.target_id,
+                    "user_id": user["id"], "rank": count + 1, "created_at": now_iso(),
+                })
+                await db.pin_purchases.insert_one({
+                    "user_id": user["id"], "target_type": data.target_type, "target_id": data.target_id,
+                    "rc_transaction_id": data.rc_transaction_id, "slot_date": iso, "created_at": now_iso(),
+                })
+                return {"ok": True, "slot_date": iso}
+            slot_date += timedelta(days=1)
+        raise HTTPException(status_code=503, detail="No pin slots available right now — contact support")
+
+    raise HTTPException(status_code=400, detail="Invalid product_type")
 
 app.include_router(api_router)
 

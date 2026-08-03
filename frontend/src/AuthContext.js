@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { api } from "@/api";
+import { configurePurchases } from "@/lib/purchases";
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -14,6 +15,10 @@ export function AuthProvider({ children }) {
       .catch(() => setUser(false))
       .finally(() => setReady(true));
   }, []);
+
+  useEffect(() => {
+    if (user && user.id) configurePurchases(user.id).catch(() => {});
+  }, [user]);
 
   const login = async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
