@@ -12,12 +12,17 @@ export default function Auth({ mode }) {
   const [form, setForm] = useState({ name: "", email: "", password: "", school: "", grade: "11th" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [agreed, setAgreed] = useState(false);
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   const submit = async (e) => {
     e.preventDefault();
     setError("");
+    if (isSignup && !agreed) {
+      setError("Please agree to the Terms of Service and Privacy Policy to continue.");
+      return;
+    }
     setLoading(true);
     try {
       if (isSignup) {
@@ -102,7 +107,24 @@ export default function Auth({ mode }) {
             )}
           </div>
 
-          <button type="submit" disabled={loading} className="nb-btn w-full justify-center mt-6" data-testid="auth-submit">
+          {isSignup && (
+            <label className="flex items-start gap-2 mt-5 cursor-pointer" data-testid="auth-legal-notice">
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                className="w-5 h-5 mt-0.5 shrink-0 accent-[#FF7B54]"
+                data-testid="auth-agree-checkbox"
+              />
+              <span className="text-sm font-medium text-[#4A4A4A]">
+                I agree to Nexus's{" "}
+                <Link to="/terms" className="font-bold underline">Terms of Service</Link> and{" "}
+                <Link to="/privacy" className="font-bold underline">Privacy Policy</Link>.
+              </span>
+            </label>
+          )}
+
+          <button type="submit" disabled={loading} className="nb-btn w-full justify-center mt-4" data-testid="auth-submit">
             {loading ? "Please wait…" : isSignup ? "Create account" : "Log in"}
           </button>
 

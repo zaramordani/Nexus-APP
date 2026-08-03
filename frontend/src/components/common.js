@@ -1,4 +1,5 @@
-import { Trophy, Star, ShieldCheck } from "@phosphor-icons/react";
+import { useState } from "react";
+import { Trophy, Star, ShieldCheck, Trash, X } from "@phosphor-icons/react";
 export { Star };
 
 export function PageHead({ label, title, children }) {
@@ -116,6 +117,67 @@ export function ReportBlockMenu({ targetType, targetId, targetName, showBlock = 
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// Icon-only delete button that requires two separate confirmations before
+// actually calling onDelete. Click 1: arms it (asks "Delete this?"). Click 2:
+// second, stronger warning ("This can't be undone"). Click 3: deletes.
+// Clicking anywhere else, or the Cancel/X, resets it. Stops propagation so it
+// can be dropped into clickable cards without also triggering navigation.
+export function DeleteButton({ onDelete, label = "post", testId, className = "" }) {
+  const [stage, setStage] = useState(0); // 0 = idle, 1 = confirm #1, 2 = confirm #2
+  const [busy, setBusy] = useState(false);
+
+  const stop = (e) => e.stopPropagation();
+
+  const reset = (e) => { stop(e); setStage(0); };
+
+  const advance = async (e) => {
+    stop(e);
+    if (stage === 0) { setStage(1); return; }
+    if (stage === 1) { setStage(2); return; }
+    setBusy(true);
+    try {
+      await onDelete();
+      setStage(0);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (stage === 0) {
+    return (
+      <button
+        type="button"
+        onClick={advance}
+        className={`nb-chip bg-white hover:bg-[#FF7B54] hover:text-white ${className}`}
+        data-testid={testId}
+        title={`Delete this ${label}`}
+      >
+        <Trash size={14} weight="bold" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5" onClick={stop}>
+      <span className="text-xs font-bold">
+        {stage === 1 ? `Delete this ${label}?` : "Really? This can't be undone."}
+      </span>
+      <button
+        type="button"
+        onClick={advance}
+        disabled={busy}
+        className="nb-chip bg-[#FF7B54] text-white"
+        data-testid={testId ? `${testId}-confirm-${stage}` : undefined}
+      >
+        {busy ? "…" : stage === 1 ? "Yes" : "Delete"}
+      </button>
+      <button type="button" onClick={reset} className="nb-chip bg-white" data-testid={testId ? `${testId}-cancel` : undefined}>
+        <X size={14} weight="bold" />
+      </button>
     </div>
   );
 }

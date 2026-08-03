@@ -182,6 +182,9 @@ class ForumPostInput(BaseModel):
 class ForumCommentInput(BaseModel):
     text: str
 
+class ProjectCommentInput(BaseModel):
+    text: str
+
 class MatchInput(BaseModel):
     goal: str
 
@@ -476,6 +479,12 @@ async def list_projects(user: dict = Depends(get_current_user)):
     projects = await db.projects.find().sort("created_at", -1).to_list(200)
     umap = await user_map([p["owner_id"] for p in projects])
     conn_map = await my_connection_map(user["id"])
+    counts = {}
+    if projects:
+        pipeline = [{"$match": {"project_id": {"$in": [str(p["_id"]) for p in projects]}}},
+                    {"$group": {"_id": "$project_id", "n": {"$sum": 1}}}]
+        async for row in db.project_comments.aggregate(pipeline):
+            counts[row["_id"]] = row["n"]
     out = []
     for p in projects:
         p = clean(p)
@@ -484,8 +493,27 @@ async def list_projects(user: dict = Depends(get_current_user)):
             owner = dict(owner)
             owner["connection_status"] = "self" if p["owner_id"] == user["id"] else conn_map.get(p["owner_id"], "none")
         p["owner"] = owner
+        p["comment_count"] = counts.get(p["id"], 0)
         out.append(p)
     return out
+
+@api_router.get("/projects/{pid}")
+async def get_project(pid: str, user: dict = Depends(get_current_user)):
+    try:
+        p = await db.projects.find_one({"_id": ObjectId(pid)})
+    except Exception:
+        p = None
+    if not p:
+        raise HTTPException(status_code=404, detail="Project not found")
+    p = clean(p)
+    owner = (await user_map([p["owner_id"]])).get(p["owner_id"])
+    if owner:
+        owner = dict(owner)
+        conn_map = await my_connection_map(user["id"])
+        owner["connection_status"] = "self" if p["owner_id"] == user["id"] else conn_map.get(p["owner_id"], "none")
+    p["owner"] = owner
+    p["comment_count"] = await db.project_comments.count_documents({"project_id": pid})
+    return p
 
 @api_router.post("/projects")
 async def create_project(data: ProjectInput, user: dict = Depends(get_current_user)):
@@ -496,12 +524,47 @@ async def create_project(data: ProjectInput, user: dict = Depends(get_current_us
     doc["_id"] = res.inserted_id
     p = clean(doc)
     p["owner"] = {"id": user["id"], "name": user["name"], "avatar": user.get("avatar")}
+    p["comment_count"] = 0
     return p
 
 @api_router.post("/projects/{pid}/join")
 async def join_project(pid: str, user: dict = Depends(get_current_user)):
     await db.projects.update_one({"_id": ObjectId(pid)}, {"$addToSet": {"applicants": user["id"]}})
     return {"ok": True}
+
+@api_router.delete("/projects/{pid}")
+async def delete_project(pid: str, user: dict = Depends(get_current_user)):
+    try:
+        p = await db.projects.find_one({"_id": ObjectId(pid)})
+    except Exception:
+        p = None
+    if not p:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if p["owner_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="You can only delete your own projects")
+    await db.projects.delete_one({"_id": ObjectId(pid)})
+    await db.project_comments.delete_many({"project_id": pid})
+    return {"ok": True}
+
+@api_router.get("/projects/{pid}/comments")
+async def get_project_comments(pid: str, user: dict = Depends(get_current_user)):
+    comments = await db.project_comments.find({"project_id": pid}).sort("created_at", 1).to_list(500)
+    umap = await user_map([c["author_id"] for c in comments])
+    out = []
+    for c in comments:
+        c = clean(c)
+        c["author"] = umap.get(c["author_id"])
+        out.append(c)
+    return out
+
+@api_router.post("/projects/{pid}/comments")
+async def add_project_comment(pid: str, data: ProjectCommentInput, user: dict = Depends(get_current_user)):
+    doc = {"project_id": pid, "author_id": user["id"], "text": data.text, "created_at": now_iso()}
+    res = await db.project_comments.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    c = clean(doc)
+    c["author"] = {"id": user["id"], "name": user["name"], "avatar": user.get("avatar")}
+    return c
 
 @api_router.post("/projects/{pid}/progress")
 async def update_progress(pid: str, body: dict, user: dict = Depends(get_current_user)):
@@ -628,6 +691,19 @@ async def create_opportunity(data: OpportunityInput, user: dict = Depends(get_cu
     res = await db.opportunities.insert_one(doc)
     doc["_id"] = res.inserted_id
     return clean(doc)
+
+@api_router.delete("/opportunities/{oid}")
+async def delete_opportunity(oid: str, user: dict = Depends(get_current_user)):
+    try:
+        o = await db.opportunities.find_one({"_id": ObjectId(oid)})
+    except Exception:
+        o = None
+    if not o:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    if o.get("posted_by") != user["id"]:
+        raise HTTPException(status_code=403, detail="You can only delete your own opportunities")
+    await db.opportunities.delete_one({"_id": ObjectId(oid)})
+    return {"ok": True}
 
 @api_router.get("/conversations")
 async def conversations(user: dict = Depends(get_current_user)):
@@ -814,6 +890,20 @@ async def add_comment(pid: str, data: ForumCommentInput, user: dict = Depends(ge
 @api_router.post("/forum/{pid}/upvote")
 async def upvote(pid: str, user: dict = Depends(get_current_user)):
     await db.forum_posts.update_one({"_id": ObjectId(pid)}, {"$inc": {"upvotes": 1}})
+    return {"ok": True}
+
+@api_router.delete("/forum/{pid}")
+async def delete_forum_post(pid: str, user: dict = Depends(get_current_user)):
+    try:
+        p = await db.forum_posts.find_one({"_id": ObjectId(pid)})
+    except Exception:
+        p = None
+    if not p:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if p["author_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="You can only delete your own posts")
+    await db.forum_posts.delete_one({"_id": ObjectId(pid)})
+    await db.forum_comments.delete_many({"post_id": pid})
     return {"ok": True}
 
 @api_router.get("/dashboard")

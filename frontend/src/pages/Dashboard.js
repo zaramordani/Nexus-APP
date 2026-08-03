@@ -14,7 +14,7 @@ export default function Dashboard() {
   const nav = useNavigate();
   const [data, setData] = useState(null);
   const [recs, setRecs] = useState([]);
-  const [area, setArea] = useState({ state: "all", city: "all" });
+  const [area, setArea] = useState({ state: "all", cities: [] });
 
   useEffect(() => {
     api.get("/dashboard").then((r) => setData(r.data)).catch(() => {});
@@ -28,7 +28,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (recs.length && area.state === "all" && user.location) {
       const { state, city } = parseLocation(user.location);
-      if (state) setArea({ state, city: city && citiesForState(state).includes(city) ? city : "all" });
+      if (state) setArea({ state, cities: city && citiesForState(state).includes(city) ? [city] : [] });
     }
     // eslint-disable-next-line
   }, [recs]);
@@ -38,7 +38,7 @@ export default function Dashboard() {
     return allOpps.filter((o) => {
       if (OPEN_TO_ALL.includes(o.location)) return true;
       const p = parseLocation(o.location);
-      return p.state === area.state && (area.city === "all" || p.city === area.city);
+      return p.state === area.state && (!area.cities?.length || area.cities.includes(p.city));
     });
   }, [allOpps, area]);
 
@@ -100,7 +100,7 @@ export default function Dashboard() {
           {/* Area / scope selector: State + City */}
           <div className="nb-card p-3 mb-4">
             <label className="nb-label flex items-center gap-1 mb-1"><MapPin size={14} weight="bold" /> Your area</label>
-            <AreaFilter state={area.state} city={area.city} onChange={setArea} testidPrefix="opp" />
+            <AreaFilter state={area.state} cities={area.cities} onChange={setArea} testidPrefix="opp" />
             <p className="text-xs text-[#4A4A4A] mt-1">
               {area.state === "all" ? "AI picks across all areas (broadened)." : "AI picks in your area plus remote/nationwide."}
             </p>

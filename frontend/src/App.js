@@ -8,6 +8,7 @@ import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import Match from "@/pages/Match";
 import Projects from "@/pages/Projects";
+import ProjectDetail from "@/pages/ProjectDetail";
 import Opportunities from "@/pages/Opportunities";
 import Messages from "@/pages/Messages";
 import Forum from "@/pages/Forum";
@@ -16,7 +17,10 @@ import Discover from "@/pages/Discover";
 import Connections from "@/pages/Connections";
 import Privacy from "@/pages/Privacy";
 import Terms from "@/pages/Terms";
+import Cookies from "@/pages/Cookies";
+import Contact from "@/pages/Contact";
 import DeleteAccountRequest from "@/pages/DeleteAccountRequest";
+import CookieBanner from "@/components/CookieBanner";
 
 function Loader() {
   return (
@@ -45,16 +49,20 @@ function App() {
     <AuthProvider>
       <Toaster position="top-right" richColors />
       <BrowserRouter>
+        <CookieBanner />
         <Routes>
           <Route path="/" element={<PublicOnly><Landing /></PublicOnly>} />
-          <Route path="/privacy" element={<Privacy />} />
-          <Route path="/terms" element={<Terms />} />
-          <Route path="/delete-account" element={<DeleteAccountRequest />} />
           <Route path="/login" element={<PublicOnly><Auth mode="login" /></PublicOnly>} />
           <Route path="/signup" element={<PublicOnly><Auth mode="signup" /></PublicOnly>} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/cookies" element={<Cookies />} />
+          <Route path="/delete-account" element={<DeleteAccountRequest />} />
           <Route path="/app" element={<Protected><Dashboard /></Protected>} />
           <Route path="/app/match" element={<Protected><Match /></Protected>} />
           <Route path="/app/projects" element={<Protected><Projects /></Protected>} />
+          <Route path="/app/projects/:id" element={<Protected><ProjectDetail /></Protected>} />
           <Route path="/app/opportunities" element={<Protected><Opportunities /></Protected>} />
           <Route path="/app/discover" element={<Protected><Discover /></Protected>} />
           <Route path="/app/connections" element={<Protected><Connections /></Protected>} />

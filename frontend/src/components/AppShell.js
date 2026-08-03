@@ -2,7 +2,7 @@ import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/AuthContext";
 import {
   SquaresFour, Sparkle, Rocket, Trophy, ChatCircleDots,
-  UsersThree, Compass, SignOut, GraduationCap, Handshake,
+  UsersThree, Compass, SignOut, GraduationCap, Handshake, EnvelopeSimple,
 } from "@phosphor-icons/react";
 
 const NAV = [
@@ -63,6 +63,9 @@ export default function AppShell({ children }) {
             <div className="text-sm font-bold truncate">{user.name}</div>
             <div className="text-xs text-[#4A4A4A] truncate">{user.grade || "Student"}</div>
           </div>
+        </Link>
+        <Link to="/contact" data-testid="nav-contact" className="flex items-center gap-2 px-3 py-2 text-sm font-bold text-[#4A4A4A] hover:text-[#0A0A0A]">
+          <EnvelopeSimple size={18} weight="bold" /> Contact us
         </Link>
         <button onClick={handleLogout} data-testid="logout-btn" className="flex items-center gap-2 px-3 py-2 text-sm font-bold text-[#4A4A4A] hover:text-[#0A0A0A]">
           <SignOut size={18} weight="bold" /> Log out

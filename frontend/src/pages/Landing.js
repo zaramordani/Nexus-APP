@@ -3,6 +3,7 @@ import {
   GraduationCap, Sparkle, Rocket, Trophy, UsersThree, ShieldCheck,
   ArrowRight, Lightning, Handshake, ChartLineUp,
 } from "@phosphor-icons/react";
+import { LegalFooter } from "@/components/LegalLayout";
 
 const Chip = ({ children }) => (
   <span className="nb-chip bg-white">{children}</span>
@@ -21,6 +22,7 @@ export default function Landing() {
             <span className="font-display text-xl font-black tracking-tight">Nexus</span>
           </div>
           <div className="flex items-center gap-3">
+            <Link to="/contact" data-testid="nav-contact-link" className="font-bold text-sm hidden sm:block hover:underline">Contact us</Link>
             <Link to="/login" data-testid="nav-login-link" className="font-bold text-sm hidden sm:block hover:underline">Log in</Link>
             <Link to="/signup" data-testid="nav-signup-link" className="nb-btn text-sm">Get started</Link>
           </div>
@@ -114,14 +116,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="border-t-2 border-[#0A0A0A] py-8 text-center text-sm font-medium text-[#4A4A4A]">
-        <p>Project Nexus — built for ambitious high school students.</p>
-        <p className="mt-2">
-          <Link to="/privacy" className="underline">Privacy Policy</Link> ·{" "}
-          <Link to="/terms" className="underline">Terms of Service</Link> ·{" "}
-          <Link to="/delete-account" className="underline">Delete my account</Link>
-        </p>
-      </footer>
+      <LegalFooter />
     </div>
   );
 }
