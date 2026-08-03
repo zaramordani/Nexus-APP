@@ -7,7 +7,7 @@ import os
 import logging
 import jwt
 import bcrypt
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from typing import List, Optional, Annotated
 
 from fastapi import FastAPI, APIRouter, Request, Response, HTTPException, Depends
@@ -48,6 +48,10 @@ def create_access_token(user_id: str, email: str) -> str:
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
+
+def age_from_birthdate(birthdate: date) -> int:
+    today = date.today()
+    return today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
 
 def clean(doc: dict) -> dict:
     if not doc:
@@ -134,6 +138,7 @@ class RegisterInput(BaseModel):
     name: str
     email: str
     password: str
+    birthdate: str
     school: Optional[str] = ""
     grade: Optional[str] = ""
 
@@ -232,9 +237,18 @@ async def register(data: RegisterInput, response: Response):
     email = data.email.lower().strip()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email already registered")
+    try:
+        birthdate = date.fromisoformat(data.birthdate)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Please enter a valid date of birth")
+    if birthdate > date.today():
+        raise HTTPException(status_code=400, detail="Please enter a valid date of birth")
+    if age_from_birthdate(birthdate) < 13:
+        raise HTTPException(status_code=400, detail="You must be at least 13 years old to use Nexus")
     doc = {
         "email": email, "password_hash": hash_password(data.password),
         "name": data.name, "school": data.school or "", "grade": data.grade or "",
+        "birthdate": data.birthdate,
         "bio": "", "avatar": f"https://api.dicebear.com/7.x/thumbs/svg?seed={data.name}",
         "interests": [], "skills": [], "looking_for": [], "location": "",
         "verified": email.endswith(".edu"), "role": "student",
@@ -285,6 +299,7 @@ async def list_students(user: dict = Depends(get_current_user)):
         if sid == user["id"] or sid in blocked:
             continue
         c = clean(s)
+        c.pop("birthdate", None)
         status = conn_map.get(sid, "none")
         c["can_review"] = (sid in shared) or (status == "connected")
         c["connection_status"] = status
@@ -297,6 +312,7 @@ async def get_student(sid: str, user: dict = Depends(get_current_user)):
     if not s:
         raise HTTPException(status_code=404, detail="Not found")
     c = clean(s)
+    c.pop("birthdate", None)
     shared = await shared_project_user_ids(user["id"])
     conn_map = await my_connection_map(user["id"])
     status = conn_map.get(sid, "none")

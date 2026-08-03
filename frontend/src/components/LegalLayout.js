@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { GraduationCap, EnvelopeSimple, InstagramLogo, ArrowLeft } from "@phosphor-icons/react";
+import { EnvelopeSimple, InstagramLogo, ArrowLeft } from "@phosphor-icons/react";
 
 export const CONTACT_EMAIL = "support.nexused@gmail.com";
 export const INSTAGRAM_URL =
@@ -56,9 +56,7 @@ export default function LegalLayout({ label, title, updated, children }) {
       <header className="bg-[#FDFBF7] border-b-2 border-[#0A0A0A] sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 md:px-12 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-9 h-9 bg-[#FF7B54] border-2 border-[#0A0A0A] rounded-lg flex items-center justify-center">
-              <GraduationCap size={20} weight="bold" />
-            </div>
+            <img src="/logo.png" alt="Nexus" className="w-9 h-9 rounded-lg border-2 border-[#0A0A0A] object-cover" />
             <span className="font-display text-xl font-black tracking-tight">Nexus</span>
           </Link>
           <Link to="/" className="flex items-center gap-1 font-bold text-sm hover:underline">

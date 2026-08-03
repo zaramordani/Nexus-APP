@@ -2,7 +2,7 @@ import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/AuthContext";
 import {
   SquaresFour, Sparkle, Rocket, Trophy, ChatCircleDots,
-  UsersThree, Compass, SignOut, GraduationCap, Handshake, EnvelopeSimple,
+  UsersThree, Compass, SignOut, Handshake, EnvelopeSimple,
 } from "@phosphor-icons/react";
 
 const NAV = [
@@ -31,9 +31,7 @@ export default function AppShell({ children }) {
       {/* Sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r-2 border-[#0A0A0A] bg-white sticky top-0 h-screen p-5">
         <Link to="/app" className="flex items-center gap-2 mb-8" data-testid="sidebar-logo">
-          <div className="w-9 h-9 bg-[#FF7B54] border-2 border-[#0A0A0A] rounded-lg flex items-center justify-center">
-            <GraduationCap size={20} weight="bold" />
-          </div>
+          <img src="/logo.png" alt="Nexus" className="w-9 h-9 rounded-lg border-2 border-[#0A0A0A] object-cover" />
           <span className="font-display text-xl font-black tracking-tight">Nexus</span>
         </Link>
         <nav className="flex flex-col gap-1 flex-1">
@@ -76,9 +74,7 @@ export default function AppShell({ children }) {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="md:hidden flex items-center justify-between px-4 py-3 border-b-2 border-[#0A0A0A] bg-[#FDFBF7] sticky top-0 z-40">
           <Link to="/app" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-[#FF7B54] border-2 border-[#0A0A0A] rounded-lg flex items-center justify-center">
-              <GraduationCap size={18} weight="bold" />
-            </div>
+            <img src="/logo.png" alt="Nexus" className="w-8 h-8 rounded-lg border-2 border-[#0A0A0A] object-cover" />
             <span className="font-display text-lg font-black">Nexus</span>
           </Link>
           <button onClick={handleLogout} className="text-sm font-bold"><SignOut size={20} weight="bold" /></button>

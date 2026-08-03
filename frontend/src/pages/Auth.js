@@ -2,14 +2,14 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/AuthContext";
 import { formatError } from "@/api";
-import { GraduationCap, ShieldCheck } from "@phosphor-icons/react";
+import { ShieldCheck } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 export default function Auth({ mode }) {
   const isSignup = mode === "signup";
   const { login, register } = useAuth();
   const nav = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", password: "", school: "", grade: "11th" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", birthdate: "", school: "", grade: "11th" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [agreed, setAgreed] = useState(false);
@@ -45,9 +45,7 @@ export default function Auth({ mode }) {
       {/* Left brand panel */}
       <div className="hidden md:flex flex-col justify-between w-2/5 bg-[#FF7B54] border-r-2 border-[#0A0A0A] p-12">
         <Link to="/" className="flex items-center gap-2">
-          <div className="w-9 h-9 bg-white border-2 border-[#0A0A0A] rounded-lg flex items-center justify-center">
-            <GraduationCap size={20} weight="bold" />
-          </div>
+          <img src="/logo.png" alt="Nexus" className="w-9 h-9 rounded-lg border-2 border-[#0A0A0A] object-cover" />
           <span className="font-display text-xl font-black">Nexus</span>
         </Link>
         <div>
@@ -81,6 +79,21 @@ export default function Auth({ mode }) {
               <div>
                 <label className="nb-label">Full name</label>
                 <input className="nb-input mt-1" value={form.name} onChange={set("name")} required data-testid="input-name" placeholder="Alex Rivera" />
+              </div>
+            )}
+            {isSignup && (
+              <div>
+                <label className="nb-label">Date of birth</label>
+                <input
+                  type="date"
+                  className="nb-input mt-1"
+                  value={form.birthdate}
+                  onChange={set("birthdate")}
+                  required
+                  max={new Date().toISOString().slice(0, 10)}
+                  data-testid="input-birthdate"
+                />
+                <p className="text-xs text-[#4A4A4A] font-medium mt-1">You must be at least 13 to join Nexus.</p>
               </div>
             )}
             <div>
