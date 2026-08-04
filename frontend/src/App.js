@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/AuthContext";
 import { Toaster } from "sonner";
 import AppShell from "@/components/AppShell";
-import Landing from "@/pages/Landing";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import Match from "@/pages/Match";
@@ -51,7 +50,7 @@ function App() {
       <BrowserRouter>
         <CookieBanner />
         <Routes>
-          <Route path="/" element={<PublicOnly><Landing /></PublicOnly>} />
+          <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<PublicOnly><Auth mode="login" /></PublicOnly>} />
           <Route path="/signup" element={<PublicOnly><Auth mode="signup" /></PublicOnly>} />
           <Route path="/contact" element={<Contact />} />
