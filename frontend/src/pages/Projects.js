@@ -3,16 +3,16 @@ import { useNavigate } from "react-router-dom";
 import { api, formatError } from "@/api";
 import { useAuth } from "@/AuthContext";
 import { PageHead, Avatar, Chips, DeleteButton } from "@/components/common";
-import { Rocket, Plus, X, Handshake, Clock, CheckCircle, Check, ChatCircle } from "@phosphor-icons/react";
+import ProjectModal, { CATEGORIES } from "@/components/ProjectModal";
+import { Plus, Handshake, Clock, CheckCircle, Check, ChatCircle, PencilSimple } from "@phosphor-icons/react";
 import { toast } from "sonner";
-
-const CATEGORIES = ["AI / Machine Learning", "Robotics", "Web Dev", "Research", "Startups", "Nonprofit", "Game Dev", "Other"];
 
 export default function Projects() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [filter, setFilter] = useState("All");
 
   const load = () => api.get("/projects").then((r) => setProjects(r.data)).catch(() => {});
@@ -99,6 +99,15 @@ export default function Projects() {
                 {p.owner_id === user.id
                   ? <div className="flex items-center gap-2">
                       <span className="nb-chip bg-white">You own this</span>
+                      <button
+                        type="button"
+                        className="nb-chip bg-white hover:bg-[#A0C4FF]"
+                        title="Edit project"
+                        data-testid={`edit-project-${p.id}`}
+                        onClick={(e) => { e.stopPropagation(); setEditing(p); }}
+                      >
+                        <PencilSimple size={14} weight="bold" />
+                      </button>
                       <DeleteButton onDelete={() => deleteProject(p)} label="project" testId={`delete-project-${p.id}`} />
                     </div>
                   : p.owner?.connection_status === "connected"
@@ -114,54 +123,14 @@ export default function Projects() {
         ))}
       </div>
 
-      {open && <CreateModal onClose={() => setOpen(false)} onCreated={() => { load(); setOpen(false); }} />}
-    </div>
-  );
-}
-
-function CreateModal({ onClose, onCreated }) {
-  const [f, setF] = useState({ title: "", description: "", category: CATEGORIES[0], roles: "", skills: "", timeline: "3 months" });
-  const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await api.post("/projects", {
-        title: f.title, description: f.description, category: f.category,
-        roles_needed: f.roles.split(",").map((s) => s.trim()).filter(Boolean),
-        skills: f.skills.split(",").map((s) => s.trim()).filter(Boolean),
-        timeline: f.timeline,
-      });
-      toast.success("Project created! 🚀");
-      onCreated();
-    } catch { toast.error("Could not create project."); } finally { setSaving(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <form onClick={(e) => e.stopPropagation()} onSubmit={submit} className="nb-card bg-[#FDFBF7] p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" data-testid="create-project-modal">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl font-black flex items-center gap-2"><Rocket size={24} weight="bold" /> New project</h2>
-          <button type="button" onClick={onClose}><X size={24} weight="bold" /></button>
-        </div>
-        <div className="space-y-3">
-          <div><label className="nb-label">Title</label><input className="nb-input mt-1" value={f.title} onChange={set("title")} required data-testid="project-title" /></div>
-          <div><label className="nb-label">Description</label><textarea className="nb-input mt-1 min-h-[80px]" value={f.description} onChange={set("description")} required data-testid="project-desc" /></div>
-          <div><label className="nb-label">Category</label>
-            <select className="nb-input mt-1" value={f.category} onChange={set("category")} data-testid="project-category">
-              {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-          <div><label className="nb-label">Roles needed (comma separated)</label><input className="nb-input mt-1" value={f.roles} onChange={set("roles")} placeholder="Frontend Developer, Designer" data-testid="project-roles" /></div>
-          <div><label className="nb-label">Skills (comma separated)</label><input className="nb-input mt-1" value={f.skills} onChange={set("skills")} placeholder="React, Python" /></div>
-          <div><label className="nb-label">Timeline</label><input className="nb-input mt-1" value={f.timeline} onChange={set("timeline")} /></div>
-        </div>
-        <button type="submit" disabled={saving} className="nb-btn w-full justify-center mt-5" data-testid="project-save">
-          {saving ? "Creating…" : "Create project"}
-        </button>
-      </form>
+      {open && <ProjectModal onClose={() => setOpen(false)} onSaved={() => { load(); setOpen(false); }} />}
+      {editing && (
+        <ProjectModal
+          project={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { load(); setEditing(null); }}
+        />
+      )}
     </div>
   );
 }

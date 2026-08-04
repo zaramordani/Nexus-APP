@@ -3,7 +3,8 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import { api, formatError } from "@/api";
 import { useAuth } from "@/AuthContext";
 import { Avatar, Chips, DeleteButton } from "@/components/common";
-import { ArrowLeft, Handshake, Clock, CheckCircle, Check, ChatCircle } from "@phosphor-icons/react";
+import ProjectModal from "@/components/ProjectModal";
+import { ArrowLeft, Handshake, Clock, CheckCircle, Check, ChatCircle, PencilSimple } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 export default function ProjectDetail() {
@@ -15,6 +16,7 @@ export default function ProjectDetail() {
   const [comments, setComments] = useState([]);
   const [text, setText] = useState("");
   const [posting, setPosting] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const loadProject = () =>
     api.get(`/projects/${id}`)
@@ -128,6 +130,15 @@ export default function ProjectDetail() {
           {project.owner_id === user.id
             ? <div className="flex items-center gap-2">
                 <span className="nb-chip bg-white">You own this</span>
+                <button
+                  type="button"
+                  className="nb-chip bg-white hover:bg-[#A0C4FF]"
+                  title="Edit project"
+                  data-testid={`edit-project-${project.id}`}
+                  onClick={() => setEditing(true)}
+                >
+                  <PencilSimple size={14} weight="bold" />
+                </button>
                 <DeleteButton onDelete={deleteProject} label="project" testId={`delete-project-${project.id}`} />
               </div>
             : project.owner?.connection_status === "connected"
@@ -171,6 +182,14 @@ export default function ProjectDetail() {
           </button>
         </form>
       </div>
+
+      {editing && (
+        <ProjectModal
+          project={project}
+          onClose={() => setEditing(false)}
+          onSaved={() => { loadProject(); setEditing(false); }}
+        />
+      )}
     </div>
   );
 }

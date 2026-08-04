@@ -218,6 +218,15 @@ class ProjectInput(BaseModel):
     skills: List[str] = []
     timeline: Optional[str] = ""
 
+class ProjectUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    roles_needed: Optional[List[str]] = None
+    skills: Optional[List[str]] = None
+    timeline: Optional[str] = None
+    progress: Optional[int] = None
+
 class OpportunityInput(BaseModel):
     title: str
     org: str
@@ -228,6 +237,16 @@ class OpportunityInput(BaseModel):
     link: Optional[str] = ""
     location: Optional[str] = "Remote"
 
+class OpportunityUpdate(BaseModel):
+    title: Optional[str] = None
+    org: Optional[str] = None
+    type: Optional[str] = None
+    description: Optional[str] = None
+    deadline: Optional[str] = None
+    tags: Optional[List[str]] = None
+    link: Optional[str] = None
+    location: Optional[str] = None
+
 class MessageInput(BaseModel):
     to_user_id: str
     text: str
@@ -236,6 +255,11 @@ class ForumPostInput(BaseModel):
     community: str
     title: str
     body: str
+
+class ForumPostUpdate(BaseModel):
+    community: Optional[str] = None
+    title: Optional[str] = None
+    body: Optional[str] = None
 
 class ForumCommentInput(BaseModel):
     text: str
@@ -409,6 +433,15 @@ async def create_review(sid: str, data: ReviewInput, user: dict = Depends(get_cu
         {"reviewer_id": user["id"], "reviewee_id": sid},
         {"$set": doc}, upsert=True,
     )
+    await recompute_reputation(sid)
+    fresh = await db.users.find_one({"_id": ObjectId(sid)})
+    return clean(fresh)
+
+@api_router.delete("/students/{sid}/reviews")
+async def delete_review(sid: str, user: dict = Depends(get_current_user)):
+    res = await db.reviews.delete_one({"reviewer_id": user["id"], "reviewee_id": sid})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Review not found")
     await recompute_reputation(sid)
     fresh = await db.users.find_one({"_id": ObjectId(sid)})
     return clean(fresh)
@@ -596,6 +629,33 @@ async def create_project(data: ProjectInput, user: dict = Depends(get_current_us
     p["comment_count"] = 0
     return p
 
+@api_router.put("/projects/{pid}")
+async def update_project(pid: str, data: ProjectUpdate, user: dict = Depends(get_current_user)):
+    try:
+        p = await db.projects.find_one({"_id": ObjectId(pid)})
+    except Exception:
+        p = None
+    if not p:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if p["owner_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="You can only edit your own projects")
+    updates = {k: v for k, v in data.model_dump().items() if v is not None}
+    if "progress" in updates:
+        prog = max(0, min(100, int(updates["progress"])))
+        updates["progress"] = prog
+        updates["status"] = "completed" if prog >= 100 else "active"
+    if updates:
+        await db.projects.update_one({"_id": ObjectId(pid)}, {"$set": updates})
+    fresh = await db.projects.find_one({"_id": ObjectId(pid)})
+    p = clean(fresh)
+    owner = (await user_map([p["owner_id"]])).get(p["owner_id"])
+    if owner:
+        owner = dict(owner)
+        owner["connection_status"] = "self"
+    p["owner"] = owner
+    p["comment_count"] = await db.project_comments.count_documents({"project_id": pid})
+    return p
+
 @api_router.post("/projects/{pid}/join")
 async def join_project(pid: str, user: dict = Depends(get_current_user)):
     await db.projects.update_one({"_id": ObjectId(pid)}, {"$addToSet": {"applicants": user["id"]}})
@@ -766,6 +826,22 @@ async def create_opportunity(data: OpportunityInput, user: dict = Depends(get_cu
     doc["_id"] = res.inserted_id
     return clean(doc)
 
+@api_router.put("/opportunities/{oid}")
+async def update_opportunity(oid: str, data: OpportunityUpdate, user: dict = Depends(get_current_user)):
+    try:
+        o = await db.opportunities.find_one({"_id": ObjectId(oid)})
+    except Exception:
+        o = None
+    if not o:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    if o.get("posted_by") != user["id"]:
+        raise HTTPException(status_code=403, detail="You can only edit your own opportunities")
+    updates = {k: v for k, v in data.model_dump().items() if v is not None}
+    if updates:
+        await db.opportunities.update_one({"_id": ObjectId(oid)}, {"$set": updates})
+    fresh = await db.opportunities.find_one({"_id": ObjectId(oid)})
+    return clean(fresh)
+
 @api_router.delete("/opportunities/{oid}")
 async def delete_opportunity(oid: str, user: dict = Depends(get_current_user)):
     try:
@@ -929,6 +1005,7 @@ async def list_forum(community: Optional[str] = None, user: dict = Depends(get_c
         p["author"] = umap.get(p["author_id"])
         p["comment_count"] = counts.get(p["id"], 0)
         p["pinned"] = p["id"] in pinned
+        p["upvoted"] = user["id"] in p.pop("upvoted_by", [])
         out.append(p)
     out.sort(key=lambda p: 0 if p["pinned"] else 1)
     return out
@@ -936,13 +1013,35 @@ async def list_forum(community: Optional[str] = None, user: dict = Depends(get_c
 @api_router.post("/forum")
 async def create_post(data: ForumPostInput, user: dict = Depends(get_current_user)):
     doc = data.model_dump()
-    doc.update({"author_id": user["id"], "upvotes": 0, "created_at": now_iso()})
+    doc.update({"author_id": user["id"], "upvotes": 0, "upvoted_by": [], "created_at": now_iso()})
     res = await db.forum_posts.insert_one(doc)
     doc["_id"] = res.inserted_id
     p = clean(doc)
+    p.pop("upvoted_by", None)
     p["author"] = {"id": user["id"], "name": user["name"], "avatar": user.get("avatar")}
     p["comment_count"] = 0
+    p["upvoted"] = False
     return p
+
+@api_router.put("/forum/{pid}")
+async def update_forum_post(pid: str, data: ForumPostUpdate, user: dict = Depends(get_current_user)):
+    try:
+        p = await db.forum_posts.find_one({"_id": ObjectId(pid)})
+    except Exception:
+        p = None
+    if not p:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if p["author_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="You can only edit your own posts")
+    updates = {k: v for k, v in data.model_dump().items() if v is not None}
+    if updates:
+        await db.forum_posts.update_one({"_id": ObjectId(pid)}, {"$set": updates})
+    fresh = await db.forum_posts.find_one({"_id": ObjectId(pid)})
+    out = clean(fresh)
+    out["upvoted"] = user["id"] in out.pop("upvoted_by", [])
+    out["author"] = (await user_map([out["author_id"]])).get(out["author_id"])
+    out["comment_count"] = await db.forum_comments.count_documents({"post_id": pid})
+    return out
 
 @api_router.get("/forum/{pid}/comments")
 async def get_comments(pid: str, user: dict = Depends(get_current_user)):
@@ -966,8 +1065,21 @@ async def add_comment(pid: str, data: ForumCommentInput, user: dict = Depends(ge
 
 @api_router.post("/forum/{pid}/upvote")
 async def upvote(pid: str, user: dict = Depends(get_current_user)):
-    await db.forum_posts.update_one({"_id": ObjectId(pid)}, {"$inc": {"upvotes": 1}})
-    return {"ok": True}
+    try:
+        p = await db.forum_posts.find_one({"_id": ObjectId(pid)})
+    except Exception:
+        p = None
+    if not p:
+        raise HTTPException(status_code=404, detail="Post not found")
+    already = user["id"] in p.get("upvoted_by", [])
+    if already:
+        # Toggle off: a user can only have one upvote counted per post at a time.
+        await db.forum_posts.update_one({"_id": ObjectId(pid)},
+                                        {"$inc": {"upvotes": -1}, "$pull": {"upvoted_by": user["id"]}})
+        return {"ok": True, "upvoted": False}
+    await db.forum_posts.update_one({"_id": ObjectId(pid)},
+                                    {"$inc": {"upvotes": 1}, "$addToSet": {"upvoted_by": user["id"]}})
+    return {"ok": True, "upvoted": True}
 
 @api_router.delete("/forum/{pid}")
 async def delete_forum_post(pid: str, user: dict = Depends(get_current_user)):
@@ -1135,7 +1247,7 @@ async def seed():
         author = id_map[f["author"]]
         res = await db.forum_posts.insert_one({
             "community": f["community"], "title": f["title"], "body": f["body"],
-            "author_id": author, "upvotes": f["upvotes"], "created_at": now_iso(),
+            "author_id": author, "upvotes": f["upvotes"], "upvoted_by": [], "created_at": now_iso(),
         })
         for c in f.get("comments", []):
             await db.forum_comments.insert_one({

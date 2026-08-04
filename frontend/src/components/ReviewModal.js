@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, formatError } from "@/api";
-import { Avatar } from "@/components/common";
+import { useAuth } from "@/AuthContext";
+import { Avatar, DeleteButton } from "@/components/common";
 import { Star, ShieldCheck, X } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -30,6 +31,7 @@ function StarRating({ value, onChange, size = 26, readOnly = false }) {
 }
 
 export default function ReviewModal({ student, onClose, onSubmitted }) {
+  const { user } = useAuth();
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [rating, setRating] = useState(0);
@@ -37,10 +39,20 @@ export default function ReviewModal({ student, onClose, onSubmitted }) {
   const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const myReview = reviews.find((r) => r.reviewer_id === user.id);
+
   const load = () => {
     setLoading(true);
     api.get(`/students/${student.id}/reviews`)
-      .then((r) => setReviews(r.data))
+      .then((r) => {
+        setReviews(r.data);
+        const mine = r.data.find((rv) => rv.reviewer_id === user.id);
+        if (mine) {
+          setRating(mine.rating);
+          setReliability(mine.reliability);
+          setComment(mine.comment || "");
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
@@ -54,13 +66,24 @@ export default function ReviewModal({ student, onClose, onSubmitted }) {
     setSaving(true);
     try {
       await api.post(`/students/${student.id}/reviews`, { rating, reliability: Number(reliability), comment });
-      toast.success(`Review submitted for ${student.name.split(" ")[0]}! 🌟`);
-      setRating(0); setComment(""); setReliability(90);
+      toast.success(myReview ? `Review updated for ${student.name.split(" ")[0]}! 🌟` : `Review submitted for ${student.name.split(" ")[0]}! 🌟`);
       load();
       onSubmitted && onSubmitted();
     } catch (e) {
       toast.error(formatError(e?.response?.data?.detail));
     } finally { setSaving(false); }
+  };
+
+  const deleteReview = async () => {
+    try {
+      await api.delete(`/students/${student.id}/reviews`);
+      toast.success("Review deleted.");
+      setRating(0); setComment(""); setReliability(90);
+      load();
+      onSubmitted && onSubmitted();
+    } catch (e) {
+      toast.error(formatError(e?.response?.data?.detail));
+    }
   };
 
   return (
@@ -79,7 +102,7 @@ export default function ReviewModal({ student, onClose, onSubmitted }) {
 
         {student.can_review ? (
           <div className="nb-card bg-white p-4 mb-5 space-y-3">
-            <div className="nb-label">Leave a review</div>
+            <div className="nb-label">{myReview ? "Edit your review" : "Leave a review"}</div>
             <div>
               <div className="text-sm font-bold mb-1">Overall rating</div>
               <StarRating value={rating} onChange={setRating} />
@@ -94,9 +117,12 @@ export default function ReviewModal({ student, onClose, onSubmitted }) {
             </div>
             <textarea className="nb-input min-h-[70px] w-full" placeholder="How was it working together?"
               value={comment} onChange={(e) => setComment(e.target.value)} data-testid="review-comment" />
-            <button className="nb-btn w-full justify-center" onClick={submit} disabled={saving} data-testid="review-submit">
-              {saving ? "Submitting…" : "Submit review"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button className="nb-btn flex-1 justify-center" onClick={submit} disabled={saving} data-testid="review-submit">
+                {saving ? "Saving…" : myReview ? "Update review" : "Submit review"}
+              </button>
+              {myReview && <DeleteButton onDelete={deleteReview} label="review" testId="review-delete" />}
+            </div>
           </div>
         ) : (
           <div className="nb-card bg-[#FFD166] p-3 mb-5 text-sm font-medium">

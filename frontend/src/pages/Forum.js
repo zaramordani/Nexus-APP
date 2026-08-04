@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, formatError } from "@/api";
 import { useAuth } from "@/AuthContext";
 import { PageHead, Avatar, ReportBlockMenu, DeleteButton, PinButton } from "@/components/common";
-import { ArrowFatUp, ChatCircle, Plus, X, UsersThree } from "@phosphor-icons/react";
+import { ArrowFatUp, ChatCircle, Plus, X, UsersThree, PencilSimple } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const COMMUNITIES = ["All", "Robotics", "AI", "Research", "Startups", "College Admissions", "Programming", "Biology"];
@@ -12,6 +12,7 @@ export default function Forum() {
   const [posts, setPosts] = useState([]);
   const [community, setCommunity] = useState("All");
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [expanded, setExpanded] = useState(null);
 
   const load = () => {
@@ -31,8 +32,14 @@ export default function Forum() {
   };
 
   const upvote = async (p) => {
-    await api.post(`/forum/${p.id}/upvote`);
-    setPosts((ps) => ps.map((x) => x.id === p.id ? { ...x, upvotes: x.upvotes + 1 } : x));
+    try {
+      const { data } = await api.post(`/forum/${p.id}/upvote`);
+      setPosts((ps) => ps.map((x) => x.id === p.id
+        ? { ...x, upvotes: x.upvotes + (data.upvoted ? 1 : -1), upvoted: data.upvoted }
+        : x));
+    } catch (e) {
+      toast.error(formatError(e?.response?.data?.detail));
+    }
   };
 
   return (
@@ -53,7 +60,7 @@ export default function Forum() {
           <div key={p.id} className="nb-card p-5" data-testid={`post-${p.id}`}>
             <div className="flex gap-4">
               <button onClick={() => upvote(p)} className="flex flex-col items-center gap-1 shrink-0" data-testid={`upvote-${p.id}`}>
-                <div className="w-10 h-10 bg-[#FFD166] border-2 border-[#0A0A0A] rounded-lg flex items-center justify-center hover:bg-[#FF7B54]">
+                <div className={`w-10 h-10 border-2 border-[#0A0A0A] rounded-lg flex items-center justify-center hover:bg-[#FF7B54] ${p.upvoted ? "bg-[#FF7B54] text-white" : "bg-[#FFD166]"}`}>
                   <ArrowFatUp size={20} weight="bold" />
                 </div>
                 <span className="font-black text-sm">{p.upvotes}</span>
@@ -62,12 +69,23 @@ export default function Forum() {
                 <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
                   <span className="nb-chip bg-[#A0C4FF]"><UsersThree size={14} weight="bold" /> {p.community}</span>
                   <div className="flex items-center gap-2">
-                    {p.author_id === user.id && (
-                      <PinButton targetType="forum_post" targetId={p.id} pinned={p.pinned} testId={`pin-post-${p.id}`} onPinned={load} />
+                    {p.author_id === user.id ? (
+                      <>
+                        <PinButton targetType="forum_post" targetId={p.id} pinned={p.pinned} testId={`pin-post-${p.id}`} onPinned={load} />
+                        <button
+                          type="button"
+                          className="nb-chip bg-white hover:bg-[#A0C4FF]"
+                          title="Edit post"
+                          data-testid={`edit-post-${p.id}`}
+                          onClick={() => setEditing(p)}
+                        >
+                          <PencilSimple size={14} weight="bold" />
+                        </button>
+                        <DeleteButton onDelete={() => deletePost(p)} label="post" testId={`delete-post-${p.id}`} />
+                      </>
+                    ) : (
+                      <ReportBlockMenu targetType="forum_post" targetId={p.id} showBlock={false} />
                     )}
-                    {p.author_id === user.id
-                      ? <DeleteButton onDelete={() => deletePost(p)} label="post" testId={`delete-post-${p.id}`} />
-                      : <ReportBlockMenu targetType="forum_post" targetId={p.id} showBlock={false} />}
                   </div>
                 </div>
                 <h3 className="font-display text-xl font-bold tracking-tight">{p.title}</h3>
@@ -85,7 +103,14 @@ export default function Forum() {
         ))}
       </div>
 
-      {open && <NewPostModal onClose={() => setOpen(false)} onCreated={() => { setOpen(false); load(); }} />}
+      {open && <PostModal onClose={() => setOpen(false)} onSaved={() => { setOpen(false); load(); }} />}
+      {editing && (
+        <PostModal
+          post={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load(); }}
+        />
+      )}
     </div>
   );
 }
@@ -126,19 +151,32 @@ function Comments({ postId, onAdded }) {
   );
 }
 
-function NewPostModal({ onClose, onCreated }) {
-  const [f, setF] = useState({ community: "Robotics", title: "", body: "" });
+function PostModal({ post, onClose, onSaved }) {
+  const isEdit = !!post;
+  const [f, setF] = useState(post
+    ? { community: post.community, title: post.title, body: post.body }
+    : { community: "Robotics", title: "", body: "" });
+  const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const submit = async (e) => {
     e.preventDefault();
-    try { await api.post("/forum", f); toast.success("Posted!"); onCreated(); }
-    catch { toast.error("Could not post."); }
+    setSaving(true);
+    try {
+      if (isEdit) {
+        await api.put(`/forum/${post.id}`, f);
+        toast.success("Post updated!");
+      } else {
+        await api.post("/forum", f);
+        toast.success("Posted!");
+      }
+      onSaved();
+    } catch { toast.error(isEdit ? "Could not update post." : "Could not post."); } finally { setSaving(false); }
   };
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <form onClick={(e) => e.stopPropagation()} onSubmit={submit} className="nb-card bg-[#FDFBF7] p-6 w-full max-w-lg" data-testid="new-post-modal">
+      <form onClick={(e) => e.stopPropagation()} onSubmit={submit} className="nb-card bg-[#FDFBF7] p-6 w-full max-w-lg" data-testid={isEdit ? "edit-post-modal" : "new-post-modal"}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl font-black">New post</h2>
+          <h2 className="font-display text-2xl font-black">{isEdit ? "Edit post" : "New post"}</h2>
           <button type="button" onClick={onClose}><X size={24} weight="bold" /></button>
         </div>
         <div className="space-y-3">
@@ -150,7 +188,9 @@ function NewPostModal({ onClose, onCreated }) {
           <div><label className="nb-label">Title</label><input className="nb-input mt-1" value={f.title} onChange={set("title")} required data-testid="post-title" /></div>
           <div><label className="nb-label">Body</label><textarea className="nb-input mt-1 min-h-[100px]" value={f.body} onChange={set("body")} required data-testid="post-body" /></div>
         </div>
-        <button className="nb-btn w-full justify-center mt-5" data-testid="post-submit">Post to forum</button>
+        <button disabled={saving} className="nb-btn w-full justify-center mt-5" data-testid="post-submit">
+          {saving ? (isEdit ? "Saving…" : "Posting…") : (isEdit ? "Save changes" : "Post to forum")}
+        </button>
       </form>
     </div>
   );

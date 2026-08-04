@@ -4,7 +4,7 @@ import { useAuth } from "@/AuthContext";
 import { PageHead, DeleteButton, PinButton } from "@/components/common";
 import { AreaFilter, AreaPicker } from "@/components/AreaSelect";
 import { parseLocation } from "@/constants/locations";
-import { Trophy, CalendarBlank, ArrowSquareOut, Buildings, MapPin, Sparkle, Plus, X, Globe, MapPinLine } from "@phosphor-icons/react";
+import { Trophy, CalendarBlank, ArrowSquareOut, Buildings, MapPin, Sparkle, Plus, X, Globe, MapPinLine, PencilSimple } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const TYPES = ["All", "Research", "Competition", "Scholarship", "Internship", "Hackathon"];
@@ -21,6 +21,7 @@ export default function Opportunities() {
   const [filter, setFilter] = useState("All");
   const [area, setArea] = useState({ state: "all", cities: [] });
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
 
   const loadOpps = () => api.get("/opportunities").then((r) => setOpps(r.data)).catch(() => {});
 
@@ -75,7 +76,20 @@ export default function Opportunities() {
                   <span className={`nb-chip ${TYPE_COLOR[o.type] || "bg-white"}`}>{o.type}</span>
                   <div className="flex items-center gap-2">
                     {typeof o.score === "number" && <span className="nb-chip bg-white text-xs">{o.score}% match</span>}
-                    {o.posted_by === user.id && <DeleteButton onDelete={() => deleteOpp(o)} label="opportunity" testId={`delete-opp-rec-${o.id}`} />}
+                    {o.posted_by === user.id && (
+                      <>
+                        <button
+                          type="button"
+                          className="nb-chip bg-white hover:bg-[#A0C4FF]"
+                          title="Edit opportunity"
+                          data-testid={`edit-opp-rec-${o.id}`}
+                          onClick={() => setEditing(o)}
+                        >
+                          <PencilSimple size={14} weight="bold" />
+                        </button>
+                        <DeleteButton onDelete={() => deleteOpp(o)} label="opportunity" testId={`delete-opp-rec-${o.id}`} />
+                      </>
+                    )}
                   </div>
                 </div>
                 <h3 className="font-display text-lg font-bold tracking-tight leading-tight">{o.title}</h3>
@@ -129,6 +143,15 @@ export default function Opportunities() {
                 {o.posted_by === user.id && (
                   <>
                     <PinButton targetType="opportunity" targetId={o.id} pinned={o.pinned} testId={`pin-opp-${o.id}`} onPinned={loadOpps} />
+                    <button
+                      type="button"
+                      className="nb-chip bg-white hover:bg-[#A0C4FF]"
+                      title="Edit opportunity"
+                      data-testid={`edit-opp-${o.id}`}
+                      onClick={() => setEditing(o)}
+                    >
+                      <PencilSimple size={14} weight="bold" />
+                    </button>
                     <DeleteButton onDelete={() => deleteOpp(o)} label="opportunity" testId={`delete-opp-${o.id}`} />
                   </>
                 )}
@@ -152,15 +175,34 @@ export default function Opportunities() {
         ))}
       </div>
 
-      {open && <NewOpportunityModal onClose={() => setOpen(false)} onCreated={() => { setOpen(false); loadOpps(); }} />}
+      {open && <OpportunityModal onClose={() => setOpen(false)} onSaved={() => { setOpen(false); loadOpps(); }} />}
+      {editing && (
+        <OpportunityModal
+          opportunity={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); loadOpps(); }}
+        />
+      )}
     </div>
   );
 }
 
-function NewOpportunityModal({ onClose, onCreated }) {
-  const [f, setF] = useState({ title: "", org: "", type: "Internship", description: "", deadline: "", link: "", tags: "" });
-  const [locMode, setLocMode] = useState("place"); // "place" | "online"
-  const [place, setPlace] = useState({ state: "", city: "" });
+function OpportunityModal({ opportunity, onClose, onSaved }) {
+  const isEdit = !!opportunity;
+  const [f, setF] = useState(opportunity
+    ? {
+        title: opportunity.title, org: opportunity.org, type: opportunity.type,
+        description: opportunity.description, deadline: opportunity.deadline || "",
+        link: opportunity.link || "", tags: (opportunity.tags || []).join(", "),
+      }
+    : { title: "", org: "", type: "Internship", description: "", deadline: "", link: "", tags: "" });
+  const [locMode, setLocMode] = useState(opportunity?.location === "Online" ? "online" : "place");
+  const [place, setPlace] = useState(() => {
+    if (!opportunity || opportunity.location === "Online") return { state: "", city: "" };
+    const p = parseLocation(opportunity.location);
+    return { state: p.state || "", city: p.city || "" };
+  });
+  const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   const submit = async (e) => {
@@ -172,20 +214,28 @@ function NewOpportunityModal({ onClose, onCreated }) {
       location,
       tags: f.tags.split(",").map((t) => t.trim()).filter(Boolean),
     };
+    setSaving(true);
     try {
-      await api.post("/opportunities", payload);
-      toast.success("Opportunity posted!");
-      onCreated();
+      if (isEdit) {
+        await api.put(`/opportunities/${opportunity.id}`, payload);
+        toast.success("Opportunity updated!");
+      } else {
+        await api.post("/opportunities", payload);
+        toast.success("Opportunity posted!");
+      }
+      onSaved();
     } catch {
-      toast.error("Could not post opportunity.");
+      toast.error(isEdit ? "Could not update opportunity." : "Could not post opportunity.");
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <form onClick={(e) => e.stopPropagation()} onSubmit={submit} className="nb-card bg-[#FDFBF7] p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" data-testid="new-opp-modal">
+      <form onClick={(e) => e.stopPropagation()} onSubmit={submit} className="nb-card bg-[#FDFBF7] p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" data-testid={isEdit ? "edit-opp-modal" : "new-opp-modal"}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl font-black">Post an opportunity</h2>
+          <h2 className="font-display text-2xl font-black">{isEdit ? "Edit opportunity" : "Post an opportunity"}</h2>
           <button type="button" onClick={onClose}><X size={24} weight="bold" /></button>
         </div>
         <div className="space-y-3">
@@ -233,7 +283,9 @@ function NewOpportunityModal({ onClose, onCreated }) {
           <div><label className="nb-label">Tags (comma separated)</label>
             <input className="nb-input mt-1" placeholder="AI, Research, Robotics" value={f.tags} onChange={set("tags")} data-testid="opp-tags" /></div>
         </div>
-        <button className="nb-btn w-full justify-center mt-5" data-testid="opp-submit">Post opportunity</button>
+        <button disabled={saving} className="nb-btn w-full justify-center mt-5" data-testid="opp-submit">
+          {saving ? (isEdit ? "Saving…" : "Posting…") : (isEdit ? "Save changes" : "Post opportunity")}
+        </button>
       </form>
     </div>
   );
