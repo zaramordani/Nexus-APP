@@ -1,12 +1,13 @@
 import { Capacitor } from "@capacitor/core";
 import { Purchases, PRODUCT_CATEGORY } from "@revenuecat/purchases-capacitor";
 
-// Placeholders — replace with the real Public SDK Keys from RevenueCat
-// (Project Settings > API Keys) once the project is set up. These two
-// product IDs must exactly match non-subscription products created in
-// both App Store Connect / Google Play Console AND RevenueCat, and the
-// same IDs are used server-side in backend/server.py.
-const REVENUECAT_API_KEY_ANDROID = "goog_REPLACE_ME";
+// Public SDK keys are safe to ship in client code (unlike the secret key,
+// which stays backend-only). REVENUECAT_API_KEY_IOS is a placeholder until
+// an iOS app exists in App Store Connect + RevenueCat. These two product
+// IDs must exactly match non-subscription products created in both
+// App Store Connect / Google Play Console AND RevenueCat, and the same IDs
+// are used server-side in backend/server.py.
+const REVENUECAT_API_KEY_ANDROID = "goog_JQfXhxyDSUfSxbDeTwPkgjTAVDo";
 const REVENUECAT_API_KEY_IOS = "appl_REPLACE_ME";
 
 export const UNLOCK_PRODUCT_ID = "com.nexusapp.mobile.unlock_full";
