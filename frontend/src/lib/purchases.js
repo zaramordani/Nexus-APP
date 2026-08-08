@@ -3,14 +3,14 @@ import { Purchases, PRODUCT_CATEGORY } from "@revenuecat/purchases-capacitor";
 
 // Public SDK keys are safe to ship in client code (unlike the secret key,
 // which stays backend-only). REVENUECAT_API_KEY_IOS is a placeholder until
-// an iOS app exists in App Store Connect + RevenueCat. These two product
-// IDs must exactly match non-subscription products created in both
-// App Store Connect / Google Play Console AND RevenueCat, and the same IDs
-// are used server-side in backend/server.py.
+// an iOS app exists in App Store Connect + RevenueCat. The app itself is a
+// paid download ($1, set directly in App Store Connect / Play Console) — this
+// is the only remaining in-app purchase. Must exactly match a non-subscription
+// product created in both stores AND in RevenueCat, and the same ID is used
+// server-side in backend/server.py.
 const REVENUECAT_API_KEY_ANDROID = "goog_JQfXhxyDSUfSxbDeTwPkgjTAVDo";
 const REVENUECAT_API_KEY_IOS = "appl_REPLACE_ME";
 
-export const UNLOCK_PRODUCT_ID = "com.nexusapp.mobile.unlock_full";
 export const PIN_PRODUCT_ID = "com.nexusapp.mobile.pin_slot";
 
 let configured = false;
@@ -43,5 +43,4 @@ async function buy(productId) {
   return tx.transactionIdentifier;
 }
 
-export const purchaseFullUnlock = () => buy(UNLOCK_PRODUCT_ID);
 export const purchasePinSlot = () => buy(PIN_PRODUCT_ID);

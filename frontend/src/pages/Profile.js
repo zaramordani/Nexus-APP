@@ -4,10 +4,8 @@ import { api } from "@/api";
 import { useAuth } from "@/AuthContext";
 import { PageHead, Avatar, Reputation } from "@/components/common";
 import { AreaPicker } from "@/components/AreaSelect";
-import { ShieldCheck, FloppyDisk, X, Plus, Shuffle, LinkSimple, Trash, WarningCircle, Sparkle } from "@phosphor-icons/react";
+import { ShieldCheck, FloppyDisk, X, Plus, Shuffle, LinkSimple, Trash, WarningCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
-import { isNative, purchaseFullUnlock } from "@/lib/purchases";
-import { formatError } from "@/api";
 
 const AVATAR_STYLES = ["thumbs", "bottts", "fun-emoji", "adventurer", "notionists", "lorelei", "micah", "personas"];
 const buildAvatar = (style, seed) => `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(seed)}`;
@@ -83,23 +81,6 @@ export default function Profile() {
   const nav = useNavigate();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [unlocking, setUnlocking] = useState(false);
-
-  const handleUnlock = async () => {
-    setUnlocking(true);
-    try {
-      const rc_transaction_id = await purchaseFullUnlock();
-      const { data } = await api.post("/purchases/verify", { product_type: "full_unlock", rc_transaction_id });
-      if (data.app_unlocked) {
-        setUser({ ...user, app_unlocked: true });
-        toast.success("Unlocked! Enjoy ad-free, exclusive features.");
-      }
-    } catch (err) {
-      if (err?.message !== "Purchase was cancelled.") toast.error(formatError(err?.response?.data?.detail) || err.message);
-    } finally {
-      setUnlocking(false);
-    }
-  };
 
   const handleDeleteAccount = async () => {
     setDeleting(true);
@@ -174,26 +155,6 @@ export default function Profile() {
           </button>
         </div>
       </div>
-
-      {isNative() && (
-        <div className="nb-card p-6 mt-6 bg-[#FFD166]">
-          <h3 className="font-display text-lg font-bold flex items-center gap-2"><Sparkle size={20} weight="fill" /> Full access</h3>
-          {user.app_unlocked ? (
-            <p className="text-sm font-bold mt-1" data-testid="unlock-status-active">
-              ✓ Unlocked — ad-free with exclusive features.
-            </p>
-          ) : (
-            <>
-              <p className="text-sm font-medium mt-1 mb-3">
-                One-time $1 purchase: removes ads and unlocks exclusive features.
-              </p>
-              <button type="button" className="nb-btn text-sm py-2" onClick={handleUnlock} disabled={unlocking} data-testid="unlock-full-access-btn">
-                {unlocking ? "Processing…" : "Unlock for $1"}
-              </button>
-            </>
-          )}
-        </div>
-      )}
 
       <div className="nb-card p-6 mt-6 border-[#E63946]">
         <h3 className="font-display text-lg font-bold flex items-center gap-2 text-[#E63946]"><WarningCircle size={20} weight="bold" /> Danger zone</h3>
